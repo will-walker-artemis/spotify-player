@@ -12,10 +12,11 @@ use crate::{
         ActionListItem, Album, AlbumId, Artist, ArtistFocusState, ArtistId, ArtistPopupAction,
         BrowsePageUIState, ConfirmableAction, Context, ContextId, ContextPageType,
         ContextPageUIState, DataReadGuard, Focusable, Id, Item, ItemId, LibraryFocusState,
-        LibraryPageUIState, PageState, PageType, PlayableId, Playback, PlaylistCreateCurrentField,
-        PlaylistFolderItem, PlaylistId, PlaylistPopupAction, PopupState, SearchFocusState,
-        SearchPageUIState, SharedState, ShowId, Track, TrackId, TrackOrder, TracksId, UIStateGuard,
-        USER_LIKED_TRACKS_ID, USER_RECENTLY_PLAYED_TRACKS_ID, USER_TOP_TRACKS_ID,
+        LibraryPageUIState, MouseTarget, PageState, PageType, PlayableId, Playback,
+        PlaylistCreateCurrentField, PlaylistFolderItem, PlaylistId, PlaylistPopupAction,
+        PopupState, SearchFocusState, SearchPageUIState, SharedState, ShowId, Track, TrackId,
+        TrackOrder, TracksId, UIStateGuard, USER_LIKED_TRACKS_ID, USER_RECENTLY_PLAYED_TRACKS_ID,
+        USER_TOP_TRACKS_ID,
     },
     ui::{single_line_input::LineInput, Orientation},
     utils::parse_uri,
@@ -109,6 +110,46 @@ fn handle_mouse_event(
                     client_pub.send(ClientRequest::Player(PlayerRequest::SeekTrack(
                         chrono::Duration::try_milliseconds(position_ms).unwrap(),
                     )))?;
+                }
+            } else {
+                let area = {
+                    let ui = state.ui.lock();
+                    ui.mouse_areas
+                        .iter()
+                        .rev()
+                        .find(|area| area.contains(event.column, event.row))
+                        .copied()
+                };
+
+                if let Some(area) = area {
+                    match area.target {
+                        MouseTarget::ResumePause => {
+                            client_pub.send(ClientRequest::Player(PlayerRequest::ResumePause))?;
+                        }
+                        MouseTarget::LibraryWindow { focus, .. } => {
+                            let item = area.item_at(event.row);
+                            let mut ui = state.ui.lock();
+                            let PageState::Library { state: page_state } = ui.current_page_mut()
+                            else {
+                                return Ok(());
+                            };
+
+                            page_state.focus = focus;
+                            if let Some(item) = item {
+                                match focus {
+                                    LibraryFocusState::Playlists => {
+                                        page_state.playlist_list.select(Some(item));
+                                    }
+                                    LibraryFocusState::SavedAlbums => {
+                                        page_state.saved_album_list.select(Some(item));
+                                    }
+                                    LibraryFocusState::FollowedArtists => {
+                                        page_state.followed_artist_list.select(Some(item));
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

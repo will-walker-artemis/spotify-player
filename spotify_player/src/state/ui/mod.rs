@@ -10,6 +10,8 @@ use crate::ui::cover_image::CoverImage;
 #[cfg(feature = "image")]
 use ratatui_image::picker::Picker;
 
+use ratatui::layout::Rect;
+
 pub type UIStateGuard<'a> = parking_lot::MutexGuard<'a, UIState>;
 
 mod page;
@@ -17,6 +19,45 @@ mod popup;
 
 pub use page::*;
 pub use popup::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MouseTarget {
+    ResumePause,
+    LibraryWindow {
+        focus: LibraryFocusState,
+        first_item: usize,
+        item_count: usize,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MouseArea {
+    pub rect: Rect,
+    pub target: MouseTarget,
+}
+
+impl MouseArea {
+    pub fn contains(&self, column: u16, row: u16) -> bool {
+        column >= self.rect.x
+            && column < self.rect.x.saturating_add(self.rect.width)
+            && row >= self.rect.y
+            && row < self.rect.y.saturating_add(self.rect.height)
+    }
+
+    pub fn item_at(&self, row: u16) -> Option<usize> {
+        let MouseTarget::LibraryWindow {
+            first_item,
+            item_count,
+            ..
+        } = self.target
+        else {
+            return None;
+        };
+
+        let item = first_item + usize::from(row.saturating_sub(self.rect.y));
+        (item < item_count).then_some(item)
+    }
+}
 
 #[cfg(feature = "image")]
 #[derive(Default)]
@@ -51,6 +92,9 @@ pub struct UIState {
     /// The rectangle representing the playback progress bar,
     /// which is mainly used to handle mouse click events (for seeking command)
     pub playback_progress_bar_rect: ratatui::layout::Rect,
+
+    /// Interactive regions populated during the most recent render.
+    pub mouse_areas: Vec<MouseArea>,
 
     /// Count prefix for vim-style navigation (e.g., 5j, 10k)
     pub count_prefix: Option<usize>,
@@ -107,8 +151,6 @@ impl UIState {
     }
 }
 
-use ratatui::layout::Rect;
-
 impl Default for UIState {
     fn default() -> Self {
         Self {
@@ -130,6 +172,8 @@ impl Default for UIState {
 
             playback_progress_bar_rect: Rect::default(),
 
+            mouse_areas: Vec::new(),
+
             count_prefix: None,
 
             #[cfg(feature = "image")]
@@ -139,5 +183,48 @@ impl Default for UIState {
             #[cfg(feature = "image")]
             picker: Picker::halfblocks(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn library_area(first_item: usize, item_count: usize) -> MouseArea {
+        MouseArea {
+            rect: Rect::new(10, 5, 20, 4),
+            target: MouseTarget::LibraryWindow {
+                focus: LibraryFocusState::Playlists,
+                first_item,
+                item_count,
+            },
+        }
+    }
+
+    #[test]
+    fn mouse_area_contains_only_points_inside_rect() {
+        let area = library_area(0, 4);
+
+        assert!(area.contains(10, 5));
+        assert!(area.contains(29, 8));
+        assert!(!area.contains(9, 5));
+        assert!(!area.contains(30, 8));
+        assert!(!area.contains(10, 9));
+    }
+
+    #[test]
+    fn mouse_area_maps_rows_to_scrolled_items() {
+        let area = library_area(7, 20);
+
+        assert_eq!(area.item_at(5), Some(7));
+        assert_eq!(area.item_at(8), Some(10));
+    }
+
+    #[test]
+    fn mouse_area_ignores_rows_after_last_item() {
+        let area = library_area(7, 9);
+
+        assert_eq!(area.item_at(6), Some(8));
+        assert_eq!(area.item_at(7), None);
     }
 }

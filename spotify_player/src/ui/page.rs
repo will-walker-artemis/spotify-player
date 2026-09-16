@@ -7,7 +7,7 @@ use chrono_humanize::HumanTime;
 use ratatui::text::Line;
 
 use crate::{
-    state::{Episode, SearchCacheEntry},
+    state::{Episode, MouseArea, MouseTarget, SearchCacheEntry},
     utils::format_duration,
 };
 
@@ -562,31 +562,68 @@ pub fn render_library_page(
     // 4. Render the page's widgets
     // Render the library page's windows.
     // Will need mutable access to the list/table states stored inside the page state for rendering.
-    let PageState::Library { state: page_state } = ui.current_page_mut() else {
-        return;
+    let (playlist_offset, album_offset, artist_offset) = {
+        let PageState::Library { state: page_state } = ui.current_page_mut() else {
+            return;
+        };
+
+        utils::render_list_window(
+            frame,
+            playlist_list,
+            playlist_rect,
+            n_playlists,
+            &mut page_state.playlist_list,
+        );
+        utils::render_list_window(
+            frame,
+            album_list,
+            album_rect,
+            n_albums,
+            &mut page_state.saved_album_list,
+        );
+        utils::render_list_window(
+            frame,
+            artist_list,
+            artist_rect,
+            n_artists,
+            &mut page_state.followed_artist_list,
+        );
+
+        (
+            page_state.playlist_list.offset(),
+            page_state.saved_album_list.offset(),
+            page_state.followed_artist_list.offset(),
+        )
     };
 
-    utils::render_list_window(
-        frame,
-        playlist_list,
-        playlist_rect,
-        n_playlists,
-        &mut page_state.playlist_list,
-    );
-    utils::render_list_window(
-        frame,
-        album_list,
-        album_rect,
-        n_albums,
-        &mut page_state.saved_album_list,
-    );
-    utils::render_list_window(
-        frame,
-        artist_list,
-        artist_rect,
-        n_artists,
-        &mut page_state.followed_artist_list,
-    );
+    if is_active {
+        ui.mouse_areas.extend([
+            MouseArea {
+                rect: playlist_rect,
+                target: MouseTarget::LibraryWindow {
+                    focus: LibraryFocusState::Playlists,
+                    first_item: playlist_offset,
+                    item_count: n_playlists,
+                },
+            },
+            MouseArea {
+                rect: album_rect,
+                target: MouseTarget::LibraryWindow {
+                    focus: LibraryFocusState::SavedAlbums,
+                    first_item: album_offset,
+                    item_count: n_albums,
+                },
+            },
+            MouseArea {
+                rect: artist_rect,
+                target: MouseTarget::LibraryWindow {
+                    focus: LibraryFocusState::FollowedArtists,
+                    first_item: artist_offset,
+                    item_count: n_artists,
+                },
+            },
+        ]);
+    }
 }
 
 pub fn render_browse_page(
