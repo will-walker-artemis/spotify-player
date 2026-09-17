@@ -355,7 +355,10 @@ cargo install spotify_player --features notify
 ### Mouse support
 
 Left-click the playback status icon to pause or resume playback, or click the progress bar to seek.
-On the library page, click a playlist, album, or artist window to focus it and select the item under the cursor.
+Click a window to focus it and select the item under the cursor. Double-click an item to activate it,
+equivalent to choosing the selected item. Popup lists support the same click and double-click behavior;
+playlist fields and confirmation buttons can also be clicked. Use the mouse wheel to scroll queue,
+command-help, logs, and popup lists.
 
 ### Daemon
 
